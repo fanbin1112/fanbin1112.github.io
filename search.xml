@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>React组件内部removeEventListener失效问题</title>
+    <url>/2024/06/03/React%E7%BB%84%E4%BB%B6%E5%86%85%E9%83%A8removeEventListener%E5%A4%B1%E6%95%88%E9%97%AE%E9%A2%98/</url>
+    <content><![CDATA[<h1 id="问题复现-示例代码"><a href="#问题复现-示例代码" class="headerlink" title="问题复现(示例代码)"></a>问题复现(示例代码)</h1><figure class="highlight js"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> judeScrollIsEnd = <span class="title function_">useCallback</span>(</span><br><span class="line">  <span class="title function_">debounce</span>(</span><br><span class="line">    <span class="function">() =&gt;</span> &#123;</span><br><span class="line">      <span class="comment">// 控制页面滚动时，icon的显隐动画</span></span><br><span class="line">      <span class="keyword">if</span> (isScroll.<span class="property">current</span>) &#123;</span><br><span class="line">        floatShrunkRef.<span class="property">current</span>.<span class="property">classList</span>.<span class="title function_">remove</span>(styles.<span class="property">hidden</span>);</span><br><span class="line">        floatShrunkRef.<span class="property">current</span>.<span class="property">classList</span>.<span class="title function_">add</span>(styles.<span class="property">visible</span>);</span><br><span class="line">      &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        floatShrunkRef.<span class="property">current</span>.<span class="property">classList</span>.<span class="title function_">remove</span>(styles.<span class="property">visible</span>);</span><br><span class="line">        floatShrunkRef.<span class="property">current</span>.<span class="property">classList</span>.<span class="title function_">add</span>(styles.<span class="property">hidden</span>);</span><br><span class="line">      &#125;</span><br><span class="line">      isScroll.<span class="property">current</span> = !isScroll.<span class="property">current</span>;</span><br><span class="line">    &#125;,</span><br><span class="line">    scrollWaitTime,</span><br><span class="line">    <span class="literal">true</span>,</span><br><span class="line">    <span class="literal">true</span>,</span><br><span class="line">  ),</span><br><span class="line">  [],</span><br><span class="line">);</span><br><span class="line"></span><br><span class="line"><span class="title function_">useEffect</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="title function_">addEventListener</span>(<span class="string">&#x27;scroll&#x27;</span>, judeScrollIsEnd);</span><br><span class="line">&#125;, []);</span><br><span class="line"></span><br><span class="line"><span class="title function_">useEffect</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="keyword">if</span> (!isShowIcon) &#123;</span><br><span class="line">    <span class="variable language_">window</span>.<span class="title function_">removeEventListener</span>(<span class="string">&#x27;scroll&#x27;</span>, judeScrollIsEnd);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;, [isShowIcon]);</span><br></pre></td></tr></table></figure>
+
+<p>当 isShowIcon 为 false 时，移除监听事件，但是事件依然会触发。</p>
+<h1 id="问题解析"><a href="#问题解析" class="headerlink" title="问题解析"></a>问题解析</h1><p>通过以下示例代码可以发现，当页面没有 props 或者 state 变化时，点击按钮是可以正常解绑 click 事件的。但当我们使用了 useState,触发了页面渲染时，解绑会失效。</p>
+<p>这是因为每当页面渲染时，<code>clickFunc</code>作为组件内的方法，会一同重新创建，导致绑定时和解绑时的<code>clickFunc</code>内存引用地址不一致。所以 removeEventListener 无法解除绑定, 再次 addEventListener 则会绑定一个新方法。</p>
+<figure class="highlight js"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> <span class="title class_">React</span>, &#123; useState &#125; <span class="keyword">from</span> <span class="string">&#x27;react&#x27;</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> <span class="title function_">App</span> = (<span class="params"></span>) =&gt; &#123;</span><br><span class="line">  <span class="comment">// const [state, setState] = useState(0)</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">const</span> <span class="title function_">handleAddListening</span> = (<span class="params"></span>) =&gt; &#123;</span><br><span class="line">    <span class="variable language_">window</span>.<span class="title function_">addEventListener</span>(<span class="string">&#x27;click&#x27;</span>, clickFunc);</span><br><span class="line">    <span class="comment">// setState(state + 1)</span></span><br><span class="line">  &#125;;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">const</span> <span class="title function_">clickFunc</span> = (<span class="params"></span>) =&gt; &#123;</span><br><span class="line">    <span class="variable language_">console</span>.<span class="title function_">log</span>(<span class="string">&#x27;clicking&#x27;</span>);</span><br><span class="line">  &#125;;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">const</span> <span class="title function_">handleRemoveListening</span> = (<span class="params"></span>) =&gt; &#123;</span><br><span class="line">    <span class="variable language_">window</span>.<span class="title function_">removeEventListener</span>(<span class="string">&#x27;click&#x27;</span>, clickFunc);</span><br><span class="line">  &#125;;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> (</span><br><span class="line">    <span class="language-xml"><span class="tag">&lt;<span class="name">div</span> <span class="attr">className</span>=<span class="string">&quot;App&quot;</span>&gt;</span></span></span><br><span class="line"><span class="language-xml">      <span class="tag">&lt;<span class="name">div</span> <span class="attr">onClick</span>=<span class="string">&#123;handleAddListening&#125;</span>&gt;</span>Click to Console<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span></span><br><span class="line"><span class="language-xml">      <span class="tag">&lt;<span class="name">div</span> <span class="attr">onClick</span>=<span class="string">&#123;handleRemoveListening&#125;</span>&gt;</span>Remove Click to Console<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span></span><br><span class="line"><span class="language-xml">    <span class="tag">&lt;/<span class="name">div</span>&gt;</span></span></span><br><span class="line">  );</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<h1 id="解决方法"><a href="#解决方法" class="headerlink" title="解决方法"></a>解决方法</h1><p>使用无依赖的<code>useCallback</code>包裹事件处理函数,解决重渲染问题。</p>
+<figure class="highlight js"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> clickFunc = <span class="title function_">useCallback</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">    <span class="variable language_">console</span>.<span class="title function_">log</span>(<span class="string">&quot;clicking&quot;</span>);</span><br><span class="line">  &#125;, []);</span><br></pre></td></tr></table></figure>
+]]></content>
+  </entry>
+  <entry>
+    <title>Teamspeak3语音下载与使用文档</title>
+    <url>/2024/06/01/Teamspeak3%E8%AF%AD%E9%9F%B3%E4%B8%8B%E8%BD%BD%E4%B8%8E%E4%BD%BF%E7%94%A8%E6%96%87%E6%A1%A3/</url>
+    <content><![CDATA[<h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>在kook越来越差的用户体验下，越来越多的游戏用户将眼光投向了各类语音软件竞品。例如最近大热的oopz或黑盒语音。其中Teamspeak3作为老牌语音软件，<br>因为其用户量少而不为人熟知，但这不影响他的优秀性能和品质。</p>
+<p>TeamSpeak 是一款 VoIP 语言通话软件，使用者可以用耳机和麦克风，通过客户端软件连线到指定的服务器，与在服务器内频道的其他使用者进行通话。是一种很像电话会议的方式。 通常 TeamSpeak 的使用者大多为多人连线游戏的玩家，与同队伍的玩家进行通讯。在游戏的对战方面，具有低内存占用、低延迟(服务器地区周围的用户低至个位数延迟&lt;10ms&gt;)、高清晰度、高可靠性等优点，是一种非常好的游戏交流方式。</p>
+<h2 id="为什不用YY和Kook"><a href="#为什不用YY和Kook" class="headerlink" title="为什不用YY和Kook"></a>为什不用YY和Kook</h2><p>首先，先说一下广告方面，用过 YY 的用户可能都知道上面满屏幕的广告，但是 TeamSpeak 和 Discord 并没有广告。</p>
+<p>其次，捆绑软件方面，Discord没有捆绑， TeamSpeak 在安装时会询问是否安装 Overwolf (可选项，此软件为游戏内覆盖层，可在游戏内查看当前说话的用户)，而安装 YY 后，同时会捆绑 YY浏览器等软件。<br>第三，YY 并不支持感应麦，即达到一定分贝才会录入。<br>另外，不知道是否还有人记得，在17年年底的某会期间，YY屏蔽了海外用户的登陆。这一条也是我的一部分朋友转战 TeamSpeak 的原因。</p>
+<h1 id="下载"><a href="#下载" class="headerlink" title="下载"></a>下载</h1><p>首先，我们需要下载 TeamSpeak 客户端，以便于您可以连接到服务器。您可以在这里下载 TeamSpeak 客户端安装包。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">https://edisonjwa.lanzoux.com/ibyHjisyeuj</span><br></pre></td></tr></table></figure>
+
+<p>安装完成本体后，软件是非中文的。这里可以下载汉化包</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">https://dl.tmspk.wiki/https:/github.com/VigorousPro/TS3-Translation_zh-CN/releases/download/snapshot/Chinese_Translation_zh-CN.ts3_translation</span><br></pre></td></tr></table></figure>
+
+<h1 id="使用"><a href="#使用" class="headerlink" title="使用"></a>使用</h1><p>在您安装好 TeamSpeak 客户端后，打开 Connections (连接) 菜单，点击 Connect (连接) 按钮，打开连接窗口。</p>
+<p>填写您要连接的服务器地址，和您的用户名，点击 Connect (连接) 按钮，即可连接至服务器。<br><img src="/../images/ts1.png" alt="ts链接服务器"></p>
+<h2 id="进阶设置"><a href="#进阶设置" class="headerlink" title="进阶设置"></a>进阶设置</h2><p>一般来说，您在连接至服务器后，您应该可以与其他用户进行交流。但是，我们仍然建议您进行一些进阶设置，以确保您可以正常使用 TeamSpeak。</p>
+<p>音频输入设置<br>点击 Tools (工具) 菜单，点击 Options (选项) 按钮，打开选项窗口。</p>
+<p>在页面左侧，点击 Capture (音频输入) 选项卡，打开音频输入设置页面。 您将会看到如下的默认设置。</p>
+<p><img src="https://static.hit.moe/teamspeak_app/assets/docs/capture-settings.png" alt="ts音频输入设置"></p>
+<p>将语音检测模式修改为 Volume Gate 后，点击 开始测试 按钮，在下方的音量条中，您可以看到您的音量变化。<br>请确保在您未发声时，噪声滑块应大于音量分贝条。同时，当您发声时，则与之相反。这样可以有助于减少噪声的收声。</p>
+<p>接下来，勾选 抑制键盘声，回声消除，以及回声抑制。这些选项可以帮助您消除回声，以及减少键盘声的收声。</p>
+<p>最后，应用您的设置，点击 OK 按钮，关闭选项窗口。</p>
+<p><img src="https://static.hit.moe/teamspeak_app/assets/docs/capture-settings-final.png" alt="ts音频输入设置2"></p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>Teamspeak作为一款原生C语言开发的软件，在性能上是无与伦比的。Kook、Oopz本质上都是通过Electron等跨端框架实现的，会有远超于原生的内存占用。<br>欢迎大家来的公益ts服务器: ts.juice999.icu,在里面寻找你的朋友吧。或者带着你的朋友一起使用这款最好用的语音软件。</p>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><p><a href="https://teamspeak.app/docs/">Teamspeak 3 客户端使用教程</a></p>
+]]></content>
+      <tags>
+        <tag>Teamspeak3</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Hello World</title>
+    <url>/2024/06/03/hello-world/</url>
+    <content><![CDATA[<p>Welcome to <a href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
+<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo new <span class="string">&quot;My New Post&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/writing.html">Writing</a></p>
+<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/server.html">Server</a></p>
+<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/generating.html">Generating</a></p>
+<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>
+]]></content>
+  </entry>
+</search>
